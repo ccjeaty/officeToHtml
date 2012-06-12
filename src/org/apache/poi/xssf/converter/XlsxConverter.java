@@ -65,7 +65,7 @@ public class XlsxConverter {
 	}
 	
 	public static void main(String[] args) throws InvalidFormatException, IOException, ParserConfigurationException, TransformerException {
-		String name = "xml";
+		String name = "test";
 		XlsxConverter.convert("c:/poi/" +name+ ".xlsx", "c:/poi/x/" +name+ ".html");
 	}
 	/**
@@ -115,6 +115,15 @@ public class XlsxConverter {
 		table.setAttribute("cellspacing", "0");
 		table.setAttribute("style", "border-collapse: collapse;");
 		
+		// get sheet merge regions
+		CellRangeAddress[] ranges  = null;
+		{
+			int num = sheet.getNumMergedRegions();
+			ranges = new CellRangeAddress[num];
+			for(int i = 0; i < num ; i ++)
+				ranges[i] = sheet.getMergedRegion(i);
+		}
+		
 		css.append("#").append(sId).append(" tr{height:").append(sheet.getDefaultRowHeightInPoints()/28.34).append("cm}\n");
 		css.append("#").append(sId).append(" td{width:").append(sheet.getDefaultColumnWidth()*0.21).append("cm}\n");
 		
@@ -126,11 +135,37 @@ public class XlsxConverter {
 		while(rows.hasNext()){
 			Row row = rows.next();
 			if(row instanceof XSSFRow)
-				processRow(table, (XSSFRow)row, sheet);
+				processRow(table, (XSSFRow)row, sheet, ranges);
 		}
 		
 		container.appendChild(table);
 	}
+	
+	/**
+	 * check cell merged..
+	 * @param ranges
+	 * @param cell
+	 * @return 1:start point | 2:mergeRange | 0:not Merged
+	 */
+	private CellRangeAddress isMreged(CellRangeAddress[] ranges, XSSFCell cell){
+		
+		int row = cell.getRowIndex();
+		int col = cell.getColumnIndex();
+		
+		for(int i = 0; i < ranges.length; i ++){
+			int rowStart = ranges[i].getFirstRow();
+			int rowEnd = ranges[i].getLastRow();
+			int colStart = ranges[i].getFirstColumn();
+			int colEnd = ranges[i].getLastColumn();
+			// merge start point
+			if(rowStart >= row && col >= colStart && rowEnd <= row && col <= colEnd){
+				return ranges[i];
+			}
+		}
+		return null;
+	}
+	
+	
 	/**
 	 * generated <code><col><code> tags. 
 	 * @param sheet 
@@ -163,66 +198,50 @@ public class XlsxConverter {
 	}
 	
 	
-	private void processRow(Element table, XSSFRow row, XSSFSheet sheet) {
+	private void processRow(Element table, XSSFRow row, XSSFSheet sheet, CellRangeAddress[] ranges) {
 		Element tr = htmlDocumentFacade.createTableRow();
 		Iterator<Cell> cells = row.cellIterator();
 		if(row.isFormatted()){
 			//TODO build row style...
+			//row.getRowStyle();
 		}
 		
 		if(row.getCTRow().getCustomHeight())
 			tr.setAttribute("style", "height:".concat(String.valueOf(row.getHeightInPoints())).concat("pt;"));
 		
 		while(cells.hasNext()){
-			Cell cell = cells.next();
+			XSSFCell cell = (XSSFCell)cells.next();
+			Element td = htmlDocumentFacade.createTableCell();
+			System.out.println(cell);
+			CellRangeAddress range = isMreged(ranges, cell);
+			System.out.println(range + " --> " + cell);
 			
+			boolean mergedCell = false;
+			if(range != null ){
+				if(cell.getRowIndex() == range.getFirstRow() && cell.getColumnIndex() == range.getFirstColumn()){
+					if ( range.getFirstColumn() != range.getLastColumn() )
+	                    td.setAttribute("colspan", String.valueOf( range.getLastColumn()- range.getFirstColumn() + 1 ) );
+	                if ( range.getFirstRow() != range.getLastRow() )
+	                    td.setAttribute("rowspan", String.valueOf( range.getLastRow()- range.getFirstRow() + 1 ) );
+				}else{
+					mergedCell = true;
+				}
+					
+			}
 			
-			
-			if(cell instanceof XSSFCell)
-				processCell(tr, (XSSFCell)cell);
+			if(!mergedCell){
+				getCellContent(td, (XSSFCell)cell);
+				tr.appendChild(td);
+			}
 		}
 		table.appendChild(tr);
 	}
 	
 
-	private void processCell(Element tr, XSSFCell cell) {
+	private void getCellContent(Element td, XSSFCell cell) {
 		
+//		System.out.println(cell.getRowIndex() + " : " + cell.getColumnIndex());
 		
-		
-		
-		int num = cell.getSheet().getNumMergedRegions();
-		
-//		System.out.println(cell.getCTCell());
-		for(int i = 0; i < num; i ++){
-			
-		CellRangeAddress c = cell.getSheet().getMergedRegion(i);
-		
-		
-		System.out.println(c.getFirstColumn());;
-		System.out.println(c.getLastColumn());
-		System.out.println(c.getFirstRow());
-		System.out.println(c.getLastRow());
-		System.out.println();
-		System.out.println(cell.getRowIndex());
-		System.out.println(cell.getColumnIndex());
-		
-		
-		System.out.println("\n\n\n");
-		
-		
-//		System.out.println(cra);
-		
-		}
-		
-//		System.exit(0);
-			
-		
-		
-		
-		
-		
-		
-		Element td = htmlDocumentFacade.createTableCell();
 		Object value ;
 		switch(cell.getCellType()){
 		case Cell.CELL_TYPE_BLANK : value = "\u00a0";	break;
@@ -239,8 +258,6 @@ public class XlsxConverter {
 			processCellStyle(td, cell.getCellStyle(), null);
 			td.setTextContent(value.toString());
 		}
-//		System.err.println(value);
-		tr.appendChild(td);	
 	}
 
 	private void processCellStyle(Element td, XSSFCellStyle style, XSSFRichTextString rts) {
