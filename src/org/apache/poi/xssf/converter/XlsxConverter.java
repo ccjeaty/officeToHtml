@@ -153,7 +153,15 @@ public class XlsxConverter {
 		for(CTCols cols : colsList){
 			long oldLevel = 1;
 			for(CTCol col : cols.getColArray()){
-				
+				while(true){
+					if(oldLevel == col.getMin()){
+						break;
+					}
+					Element column = htmlDocumentFacade.createTableColumn();
+					column.setAttribute("style", "width:2in;");
+					table.appendChild(column);
+					oldLevel ++;
+				}
 				Element column = htmlDocumentFacade.createTableColumn();
 				String width = new BigDecimal(sheet.getColumnWidth(Long.bitCount(oldLevel))/1440.0, mc ).toString() ;
 				column.setAttribute("style", "width:".concat( width ).concat("in;"));
