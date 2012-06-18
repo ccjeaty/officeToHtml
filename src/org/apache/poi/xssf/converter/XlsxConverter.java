@@ -141,30 +141,6 @@ public class XlsxConverter {
 		container.appendChild(table);
 	}
 	
-	/**
-	 * check cell merged..
-	 * @param ranges
-	 * @param cell
-	 * @return 1:start point | 2:mergeRange | 0:not Merged
-	 */
-	private CellRangeAddress isMreged(CellRangeAddress[] ranges, XSSFCell cell){
-		
-		int row = cell.getRowIndex();
-		int col = cell.getColumnIndex();
-		
-		for(int i = 0; i < ranges.length; i ++){
-			int rowStart = ranges[i].getFirstRow();
-			int rowEnd = ranges[i].getLastRow();
-			int colStart = ranges[i].getFirstColumn();
-			int colEnd = ranges[i].getLastColumn();
-			// merge start point
-			if(rowStart >= row && col >= colStart && rowEnd <= row && col <= colEnd){
-				return ranges[i];
-			}
-		}
-		return null;
-	}
-	
 	
 	/**
 	 * generated <code><col><code> tags. 
@@ -177,26 +153,15 @@ public class XlsxConverter {
 		for(CTCols cols : colsList){
 			long oldLevel = 1;
 			for(CTCol col : cols.getColArray()){
-				while(true){
-					if(oldLevel == col.getMin()){
-						break;
-					}
-					Element column = htmlDocumentFacade.createTableColumn();
-//					htmlDocumentFacade.addStyleClass(column, "col", "width:2cm;");
-					column.setAttribute("style", "width:2cm;");
-					table.appendChild(column);
-					oldLevel ++;
-				}
+				
 				Element column = htmlDocumentFacade.createTableColumn();
 				String width = new BigDecimal(sheet.getColumnWidth(Long.bitCount(oldLevel))/1440.0, mc ).toString() ;
-				column.setAttribute("style", "width:".concat( width ).concat("cm;"));
+				column.setAttribute("style", "width:".concat( width ).concat("in;"));
 				table.appendChild(column);
-				
 				oldLevel ++;
 			}
 		}
 	}
-	
 	
 	private void processRow(Element table, XSSFRow row, XSSFSheet sheet, CellRangeAddress[] ranges) {
 		Element tr = htmlDocumentFacade.createTableRow();
@@ -212,27 +177,33 @@ public class XlsxConverter {
 		while(cells.hasNext()){
 			XSSFCell cell = (XSSFCell)cells.next();
 			Element td = htmlDocumentFacade.createTableCell();
-			System.out.println(cell);
-			CellRangeAddress range = isMreged(ranges, cell);
-			System.out.println(range + " --> " + cell);
+			
+			CellRangeAddress range = null;
+			for(CellRangeAddress temp : ranges)
+				if(temp.isInRange(cell.getRowIndex(), cell.getColumnIndex())){
+					range = temp;	break;
+				}
 			
 			boolean mergedCell = false;
 			if(range != null ){
 				if(cell.getRowIndex() == range.getFirstRow() && cell.getColumnIndex() == range.getFirstColumn()){
+					//colspan
 					if ( range.getFirstColumn() != range.getLastColumn() )
 	                    td.setAttribute("colspan", String.valueOf( range.getLastColumn()- range.getFirstColumn() + 1 ) );
+					//rowspan
 	                if ( range.getFirstRow() != range.getLastRow() )
 	                    td.setAttribute("rowspan", String.valueOf( range.getLastRow()- range.getFirstRow() + 1 ) );
+	                System.out.println(td);
 				}else{
 					mergedCell = true;
 				}
-					
 			}
 			
 			if(!mergedCell){
 				getCellContent(td, (XSSFCell)cell);
 				tr.appendChild(td);
 			}
+			range = null;
 		}
 		table.appendChild(tr);
 	}
